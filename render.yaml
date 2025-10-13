@@ -2,7 +2,7 @@ services:
   - type: web
     name: leaf-health-detector
     env: python
-    region: oregon          
-    plan: free             
+    region: oregon
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python host.py
+    startCommand: gunicorn host:app --bind 0.0.0.0:$PORT
