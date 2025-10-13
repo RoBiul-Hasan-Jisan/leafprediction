@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Leaf Health Detector 🌿</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1> Leaf Health Detector</h1>
+        <p>Upload a leaf image and detect its health and specific disease.</p>
+    </div>
+
+    <div class="upload-section">
+        <input type="file" id="fileInput" accept="image/*">
+        <button onclick="uploadImage()">Predict</button>
+    </div>
+
+    <div id="imagePreview" class="preview-section"></div>
+    <div id="results" class="results-section"></div>
+</div>
+
+<script>
+function uploadImage() {
+    let fileInput = document.getElementById("fileInput");
+    if(fileInput.files.length === 0){ alert("Select an image"); return;}
+    let formData = new FormData();
+    formData.append("image", fileInput.files[0]);
+
+    let results = document.getElementById("results");
+    results.innerHTML = `<div class="loader"></div>`;
+
+    fetch("/predict", {method:"POST", body: formData})
+        .then(response => response.json())
+        .then(data => {
+            let imgPreview = document.getElementById("imagePreview");
+            imgPreview.innerHTML = `<img src="${URL.createObjectURL(fileInput.files[0])}" class="preview-img">`;
+            results.innerHTML = "";
+
+            if(!data.leaf){
+                results.innerHTML = "<h3 class='not-leaf'>🚫 This is not a leaf.</h3>";
+                return;
+            }
+
+            // Show Health
+            results.innerHTML += `<h3>Health: <span class="health">${data.health}</span> (${(data.health_conf*100).toFixed(1)}%)</h3>`;
+
+            // Show Top 1 Specific Disease
+            if(data.specific_disease.length > 0){
+                results.innerHTML += "<h4>Top Specific Disease:</h4><ul>";
+                results.innerHTML += `<li>${data.specific_disease[0]} - ${(data.disease_conf[0]*100).toFixed(1)}%</li>`;
+                results.innerHTML += "</ul>";
+            }
+        })
+}
+</script>
+</body>
+</html>
