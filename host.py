@@ -5,10 +5,11 @@ import torch.nn.functional as F
 from torchvision import transforms, models
 from PIL import Image
 import io
+import os
 
-# ==============================
+
 # CONFIG
-# ==============================
+
 LEAF_MODEL_PATH = "models/leaf_detector.pth"
 DISEASE_MODEL_PATH = "models/best_cpu_model.pth"
 SPECIFIC_DISEASE_MODEL_PATH = "models/disease_stage2_best_model.pth"
@@ -30,27 +31,12 @@ SPECIFIC_DISEASE_CLASSES = [
     "Tomato___Target_Spot","Tomato___Tomato_mosaic_virus"
 ]
 
-CATEGORY_MAP = {
-    "Apple": ["Apple___Apple_scab","Apple___Black_rot","Apple___Cedar_apple_rust","Anthracnose"],
-    "Cherry": ["Cherry_including_sour___Powdery_mildew"],
-    "Citrus": ["Citrus Canker"],
-    "Litchi": ["Anthrax_Leaf","Bituminous_Leaf","Curl_Leaf","Deficiency_Leaf","Felt_Leaf","Fungal_Leaf_Spot",
-              "Leaf_Blight","Leaf_blight_Litchi_leaf_diseases","Leaf_Gall","Leaf_Holes","Litchi_algal_spot_in_non-direct_sunlight",
-              "Litchi_anthracnose_on_cloudy_day","Litchi_leaf_mites_in_direct_sunlight","Litchi_mayetiola_after_raining"],
-    "Pepper": ["Pepper__bell___Bacterial_spot"],
-    "Potato": ["Potato___Early_blight","Potato___Late_blight"],
-    "Tomato": ["Tomato__Tomato_YellowLeaf__Curl_Virus","Tomato___Bacterial_spot","Tomato___Early_blight",
-               "Tomato___Late_blight","Tomato___Leaf_Mold","Tomato___Septoria_leaf_spot","Tomato___Target_Spot",
-               "Tomato___Tomato_mosaic_virus"],
-    "Others": []
-}
-
 THRESHOLD_LEAF = 0.8
 THRESHOLD_UNHEALTHY = 0.6
 
-# ==============================
+
 # LOAD MODELS
-# ==============================
+
 def load_leaf_model():
     model = models.mobilenet_v3_small(weights=None)
     model.classifier[3] = nn.Linear(model.classifier[3].in_features, len(LEAF_CLASS_NAMES))
@@ -83,9 +69,9 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-# ==============================
+
 # FLASK APP
-# ==============================
+
 app = Flask(__name__)
 
 @app.route("/")
@@ -126,17 +112,20 @@ def predict():
     response["health"] = pred_class
     response["health_conf"] = float(max_prob2.item())
 
-    # Step 3: Specific Disease
+    # Step 3: Specific Disease (only top 1)
     if pred_class == "Unhealthy" and max_prob2.item() > THRESHOLD_UNHEALTHY:
         with torch.no_grad():
             out_spec = specific_disease_model(img_tensor)
             probs3 = F.softmax(out_spec, dim=1)[0]
-            top_probs, top_idxs = torch.topk(probs3,3)
-            for p,i in zip(top_probs, top_idxs):
-                response["specific_disease"].append(SPECIFIC_DISEASE_CLASSES[i.item()])
-                response["disease_conf"].append(float(p.item()))
+            top_prob, top_idx = torch.max(probs3, 0)
+            response["specific_disease"].append(SPECIFIC_DISEASE_CLASSES[top_idx.item()])
+            response["disease_conf"].append(float(top_prob.item()))
 
     return jsonify(response)
 
+
+# RUN FLASK 
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
